@@ -41,7 +41,7 @@ use std::{
     }
 };
 
-pub struct HostDeviceMemory {    
+pub struct HostDeviceMem {    
     host_ptr: *mut c_void,
     device_ptr: CUdeviceptr,
     max_shape: Vec<usize>,
@@ -53,7 +53,7 @@ pub struct HostDeviceMemory {
     taints: AtomicUsize
 }
 
-impl HostDeviceMemory {
+impl HostDeviceMem {
     pub fn new<T>(max_shape: &[usize],stream: &CuStream) -> CuResult<Self> 
     {
         let size: usize = max_shape.iter().product::<usize>() * size_of::<T>();
@@ -128,8 +128,7 @@ impl HostDeviceMemory {
         let size = src.len() * size_of::<T>();
         if size > self.size {
             return Err(CuError::InvalidValue);
-        }
-        
+        }        
         unsafe {
             copy_nonoverlapping(
                 src.as_ptr() as *const c_void,
@@ -186,7 +185,6 @@ impl HostDeviceMemory {
             }
             Err(cuErr) => Err(cuErr)
         }
-
     }
 
     pub fn dtoh_async(&self) -> CUresult
@@ -223,7 +221,7 @@ impl HostDeviceMemory {
     }
 }
 
-impl Drop for HostDeviceMemory {
+impl Drop for HostDeviceMem {
     fn drop(&mut self) 
     {
         unsafe { 
