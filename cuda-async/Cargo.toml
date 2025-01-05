@@ -19,3 +19,6 @@ num-traits = "0.2"
 thiserror = "1"
 ndarray = "0.16.1"
 tokio = { version = "1.42.0", features = ["sync"] }
+
+[dev-dependencies]
+tokio = { version = "1.42.0", features = ["rt-multi-thread"] }

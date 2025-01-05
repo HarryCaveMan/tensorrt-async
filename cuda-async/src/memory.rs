@@ -9,6 +9,7 @@ use crate::{
         cuMemAllocHost_v2,
         cuMemcpyDtoHAsync_v2,
         cuMemcpyHtoDAsync_v2,
+        cuMemcpyDtoDAsync_v2,
         cuMemFree_v2,
         cuMemFreeHost,
         cuEventDestroy_v2
@@ -49,6 +50,7 @@ pub struct HostDeviceMem {
     stream: CuStream,
     htod_event: CuEvent,
     dtoh_event: CuEvent,
+    dtod_event: CuEvent,
     guard: Arc<Mutex<()>>,
     taints: AtomicUsize
 }
@@ -64,6 +66,7 @@ impl HostDeviceMem {
         };
         let htod_event: CuEvent = CuEvent::new()?;
         let dtoh_event: CuEvent = CuEvent::new()?;
+        let dtod_event: CuEvent = CuEvent::new()?;
         match wrap!((), host_alloc_res) {
             Ok(_) => {
                 let device_alloc_res: CUresult = unsafe {
@@ -78,6 +81,7 @@ impl HostDeviceMem {
                         stream: stream.clone(),
                         htod_event: htod_event,
                         dtoh_event: dtoh_event,
+                        dtod_event: dtod_event,
                         guard: Arc::new(Mutex::new(())),
                         taints: AtomicUsize::new(0)
                     },
@@ -141,14 +145,14 @@ impl HostDeviceMem {
 
     pub fn dump_ndarray<T>(&self,shape: &[usize]) -> ArrayD<T>
     where T: Clone + Default 
-    {
-        let size = self.size / size_of::<T>();
-        let mut array = ArrayD::<T>::default(IxDyn(shape));
+    {        
+        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(shape));
+        let array_size: usize = array.len() * size_of::<T>();
         unsafe {
             copy_nonoverlapping(
                 self.host_ptr,
                 array.as_mut_ptr() as *mut c_void,
-                self.size
+                array_size
             );
         }
         array
@@ -219,12 +223,43 @@ impl HostDeviceMem {
             Err(cuErr) => Err(cuErr)
         }
     }
+
+    pub fn move_on_device_async(&self,dst: &HostDeviceMem) -> CUresult
+    {
+        unsafe {
+            cuMemcpyDtoDAsync_v2(
+                dst.device_ptr(),
+                self.device_ptr,
+                self.size,
+                self.stream.get_raw()
+            )
+        }
+    }
+
+    pub async fn move_on_device(&self,dst: &HostDeviceMem) -> CuResult<()>
+    {
+        let  dtod_async_res: CUresult = self.move_on_device_async(dst);
+        let event: CuEvent = self.dtod_event.clone();
+        let stream: CuStream = self.stream.clone();
+        match wrap_async!(
+            dtod_async_res,
+            event,
+            stream
+        )
+        {
+            Ok(future) => {
+                future.await;
+                Ok(())
+            }
+            Err(cuErr) => Err(cuErr)
+        }
+    }
 }
 
 impl Drop for HostDeviceMem {
     fn drop(&mut self) 
     {
-        unsafe { 
+        unsafe {
             cuMemFreeHost(self.host_ptr);
             cuMemFree_v2(self.device_ptr);
         };
