@@ -1,7 +1,5 @@
 use ndarray::{ArrayD,IxDyn};
-use tokio::sync::{Mutex,OwnedMutexGuard};
 use crate::{
-    taint::Taint,
     cu_api::{
         CUdeviceptr,
         CUresult,
@@ -29,7 +27,6 @@ use std::{
             Ordering::SeqCst
         }
     },
-    future::Future,
     ffi::c_void,
     ptr::{
         null_mut,
@@ -45,20 +42,17 @@ use std::{
 pub struct HostDeviceMem {    
     host_ptr: *mut c_void,
     device_ptr: CUdeviceptr,
-    max_shape: Vec<usize>,
     size: usize,
+    tensor_shape: Vec<usize>,
     stream: CuStream,
     htod_event: CuEvent,
     dtoh_event: CuEvent,
-    dtod_event: CuEvent,
-    guard: Arc<Mutex<()>>,
-    taints: AtomicUsize
+    dtod_event: CuEvent
 }
 
 impl HostDeviceMem {
-    pub fn new<T>(max_shape: &[usize],stream: &CuStream) -> CuResult<Self> 
+    pub fn new<T>(size:usize,stream: &CuStream) -> CuResult<Self> 
     {
-        let size: usize = max_shape.iter().product::<usize>() * size_of::<T>();
         let mut host_ptr: *mut c_void = null_mut();
         let mut device_ptr: CUdeviceptr = 0;
         let host_alloc_res: CUresult = unsafe {
@@ -76,34 +70,18 @@ impl HostDeviceMem {
                     Self {
                         host_ptr: host_ptr, 
                         device_ptr: device_ptr,
-                        max_shape: Vec::from(max_shape),
-                        size: size, 
+                        size: size,
+                        tensor_shape: Vec::<usize>::new(),
                         stream: stream.clone(),
                         htod_event: htod_event,
                         dtoh_event: dtoh_event,
-                        dtod_event: dtod_event,
-                        guard: Arc::new(Mutex::new(())),
-                        taints: AtomicUsize::new(0)
+                        dtod_event: dtod_event
                     },
                     device_alloc_res
                 )
             }
             Err(cuErr) => Err(cuErr)
         }
-    }
-
-    pub fn taints(&self) -> usize {
-        self.taints.load(SeqCst)
-    }
-
-    pub async fn with_guard<F, Fut, R>(&self, func: F) -> R
-    where
-        F: FnOnce() -> Fut,
-        Fut: Future<Output = R>,
-    {
-        let _taint = Taint::new(&self.taints);
-        let _guard = self.guard.clone().lock_owned().await;
-        func().await
     }
 
     pub unsafe fn host_ptr(&self) -> *mut c_void
@@ -126,13 +104,22 @@ impl HostDeviceMem {
         unsafe { from_raw_parts_mut(self.host_ptr as *mut T, size) }
     }
 
-    pub fn load_ndarray<T>(&self, src: &ArrayD<T>) -> CuResult<()>
+    pub fn tensor_shape(&self) -> &Vec<usize> {
+        &self.tensor_shape
+    }
+
+    pub fn set_tensor_shape(&mut self, shape: &Vec<usize>) {
+        self.tensor_shape = shape.clone();
+    }
+
+    pub fn load_ndarray<T>(&mut self, src: &ArrayD<T>) -> CuResult<()>
     where T: Clone
     {
         let size = src.len() * size_of::<T>();
         if size > self.size {
             return Err(CuError::InvalidValue);
-        }        
+        }
+        self.set_tensor_shape(&Vec::<usize>::from(src.shape()));
         unsafe {
             copy_nonoverlapping(
                 src.as_ptr() as *const c_void,
@@ -143,10 +130,10 @@ impl HostDeviceMem {
         Ok(())
     }
 
-    pub fn dump_ndarray<T>(&self,shape: &[usize]) -> ArrayD<T>
+    pub fn dump_ndarray<T>(&self) -> ArrayD<T>
     where T: Clone + Default 
     {        
-        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(shape));
+        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(&self.tensor_shape));
         let array_size: usize = array.len() * size_of::<T>();
         unsafe {
             copy_nonoverlapping(
@@ -158,23 +145,21 @@ impl HostDeviceMem {
         array
     }
 
-    pub fn htod_async(&self) -> CUresult 
+    pub unsafe fn htod_async(&self) -> CUresult 
     {
-        let htod_res: CUresult = unsafe {
-            cuMemcpyHtoDAsync_v2(
+        let htod_res: CUresult = cuMemcpyHtoDAsync_v2(
                 self.device_ptr,
                 self.host_ptr,
                 self.size,
                 self.stream.get_raw()
-            )
-        };
+        );
         self.htod_event.record(&self.stream);
         htod_res
     }
 
     pub async fn htod(&self) -> CuResult<()>
     {
-        let htod_async_res: CUresult = self.htod_async();
+        let htod_async_res: CUresult = unsafe { self.htod_async() };
         let event: CuEvent = self.htod_event.clone();
         let stream: CuStream = self.stream.clone();
         match wrap_async!(
@@ -191,23 +176,21 @@ impl HostDeviceMem {
         }
     }
 
-    pub fn dtoh_async(&self) -> CUresult
+    pub unsafe fn dtoh_async(&self) -> CUresult
     {
-        let dtoh_res: CUresult = unsafe {
-            cuMemcpyDtoHAsync_v2(
+        let dtoh_res: CUresult = cuMemcpyDtoHAsync_v2(
                 self.host_ptr,
                 self.device_ptr,
                 self.size,
                 self.stream.get_raw()
-            )
-        };
+        );
         self.dtoh_event.record(&self.stream);
         dtoh_res
     }
 
     pub async fn dtoh(&self) -> CuResult<()>
     {
-        let  dtoh_async_res: CUresult = self.dtoh_async();
+        let  dtoh_async_res: CUresult = unsafe { self.dtoh_async() };
         let event: CuEvent = self.dtoh_event.clone();
         let stream: CuStream = self.stream.clone();
         match wrap_async!(
@@ -224,21 +207,21 @@ impl HostDeviceMem {
         }
     }
 
-    pub fn move_on_device_async(&self,dst: &HostDeviceMem) -> CUresult
+    pub unsafe fn move_on_device_async(&self, dst: &mut HostDeviceMem) -> CUresult
     {
-        unsafe {
-            cuMemcpyDtoDAsync_v2(
+        let dtod_result: CUresult = cuMemcpyDtoDAsync_v2(
                 dst.device_ptr(),
                 self.device_ptr,
                 self.size,
                 self.stream.get_raw()
-            )
-        }
+        );
+        self.dtod_event.record(&self.stream);
+        dtod_result
     }
 
-    pub async fn move_on_device(&self,dst: &HostDeviceMem) -> CuResult<()>
+    pub async fn move_on_device(&self, dst: &mut HostDeviceMem) -> CuResult<()>
     {
-        let  dtod_async_res: CUresult = self.move_on_device_async(dst);
+        let dtod_async_res: CUresult = unsafe { self.move_on_device_async(dst) };
         let event: CuEvent = self.dtod_event.clone();
         let stream: CuStream = self.stream.clone();
         match wrap_async!(
@@ -249,6 +232,7 @@ impl HostDeviceMem {
         {
             Ok(future) => {
                 future.await;
+                dst.set_tensor_shape(&self.tensor_shape);
                 Ok(())
             }
             Err(cuErr) => Err(cuErr)

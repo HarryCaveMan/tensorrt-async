@@ -1,21 +1,25 @@
-use std::sync::atomic::{
-    AtomicUsize,
-    Ordering::SeqCst
+use std::sync::{
+    Arc,
+    atomic::{
+        AtomicUsize,
+        Ordering::SeqCst
+    }
 };
 
-pub struct Taint<'a> {
-    counter: &'a AtomicUsize,
+pub struct Taint {
+    counter: Arc<AtomicUsize>,
+    size: usize
 }
 
-impl<'a> Taint<'a> {
-    pub fn new(counter: &'a AtomicUsize) -> Self {
-        counter.fetch_add(1, SeqCst);
-        Self { counter }
+impl Taint {
+    pub fn new(counter: Arc<AtomicUsize>,size: usize) -> Self {
+        counter.fetch_add(size, SeqCst);
+        Self { counter, size }
     }
 }
 
-impl<'a> Drop for Taint<'a> {
+impl Drop for Taint {
     fn drop(&mut self) {
-        self.counter.fetch_sub(1, SeqCst);
+        self.counter.fetch_sub(self.size, SeqCst);
     }
 }

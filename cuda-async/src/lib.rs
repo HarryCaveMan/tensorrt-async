@@ -16,6 +16,7 @@ pub (crate) mod future;
 
 // public interface
 pub mod memory;
+pub mod io_buffers;
 pub mod taint;
 pub use cu_rs::{
     init as cu_init,
@@ -37,7 +38,7 @@ mod tests {
         cu_init,
         CuContext,
         CuDevice,
-        memory::HostDeviceMem,
+        io_buffers::IOBuffers,
         CuResult,
         CuError,
         CuStream
@@ -56,26 +57,24 @@ mod tests {
             println!("Creating stream");
             let stream = CuStream::new().unwrap();
             let max_shape = [16, 128, 512];
+            let buffer_size: usize = max_shape.iter().product::<usize>() * size_of::<f32>();
             let arr_shape = [4, 32, 512];
-            let example_data = ArrayD::<f32>::ones(IxDyn(&max_shape));
+            let example_data = ArrayD::<f32>::ones(IxDyn(&arr_shape));
+            let example_data_size: usize = example_data.len() * size_of::<f32>();
             println!("Creating buffers");
-            let input_buffer = HostDeviceMem::new::<f32>(&max_shape, &stream).unwrap();
-            let output_buffer = HostDeviceMem::new::<f32>(&max_shape, &stream).unwrap();
-            let data_after_roundtrip: ArrayD<f32> = input_buffer.with_guard(|| async {
-                println!("Data before trip {:?}", example_data);
-                println!("Loading data to input buffer");
-                input_buffer.load_ndarray::<f32>(&example_data);
-                println!("Moving data to input device buffer");
-                input_buffer.htod().await;
-                output_buffer.with_guard(|| async {
+            let mut io_buffers: IOBuffers = IOBuffers::new::<f32>(buffer_size, buffer_size, &stream).unwrap();
+            let data_after_roundtrip: ArrayD<f32> = io_buffers.with_guard_mut(
+                example_data_size,
+                |io_buf| async {
+                    println!("Data before trip {:?}", example_data);
+                    println!("Loading data to input buffer");
+                    io_buf.push::<f32>(&example_data).await.unwrap();
                     println!("Moving data to output device buffer");
-                    input_buffer.move_on_device(&output_buffer).await;
-                    println!("Moving data to output host buffer");
-                    output_buffer.dtoh().await;
-                    println!("Dumping data from output host buffer");
-                    output_buffer.dump_ndarray::<f32>(&max_shape)
-                }).await
-            }).await;
+                    io_buf.itod().await.unwrap();
+                    println!("Dumping data from output buffer");       
+                    io_buf.pull::<f32>().await
+                }
+            ).await;
             println!("Data after trip {:?}", data_after_roundtrip);
             assert_eq!(example_data, data_after_roundtrip);
         });
