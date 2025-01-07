@@ -66,6 +66,8 @@ mod tests {
             let data_after_roundtrip: ArrayD<f32> = io_buffers.with_guard_mut(
                 example_data_size,
                 |io_buf| async {
+                    println!("Taints: {:?}", io_buf.taints());
+                    assert_eq!(io_buf.taints(),example_data_size);
                     println!("Data before trip {:?}", example_data);
                     println!("Loading data to input buffer");
                     io_buf.push::<f32>(&example_data).await.unwrap();
@@ -75,6 +77,8 @@ mod tests {
                     io_buf.pull::<f32>().await
                 }
             ).await;
+            println!("Taints: {:?}", io_buffers.taints());
+            assert_eq!(io_buffers.taints(),0);
             println!("Data after trip {:?}", data_after_roundtrip);
             assert_eq!(example_data, data_after_roundtrip);
         });

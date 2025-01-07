@@ -58,9 +58,7 @@ impl IOBuffers {
         let _taint = Taint::new(Arc::clone(&self.taints), size);
         let _guard = self.guard.clone().lock_owned().await;
         func(self).await
-    }
-
-    
+    }    
 
     pub fn input(&self) -> &HostDeviceMem {
         &self.input
@@ -76,6 +74,10 @@ impl IOBuffers {
 
     pub fn output_mut(&mut self) -> &mut HostDeviceMem {
         &mut self.output
+    }
+
+    pub fn taints(&self) -> usize {
+        self.taints.load(SeqCst)
     }
 
     pub async fn push<T>(&mut self, src: &ArrayD<T>) -> CuResult<()>
