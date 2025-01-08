@@ -7,30 +7,30 @@ use crate::{
     }
 };
 use std::{
-    sync::Arc,
     future::Future,
     ffi::c_void,
     task::{Context, Poll, Waker},
+    marker::PhantomData,
     pin::Pin
 };
 
-pub struct CuEventFuture {
-    event: Arc<CuEvent>,
-    stream: Arc<CuStream>,
-    waker: Arc<Option<Waker>>
+pub struct CuEventFuture<'a> {
+    event: CuEvent,
+    stream: CuStream,
+    _phantom: PhantomData<&'a ()>
 }
 
-impl CuEventFuture {
+impl<'a> CuEventFuture<'a> {
     pub fn new(event: CuEvent, stream: CuStream) -> Self {
         Self { 
-            event: Arc::new(event),
-            stream: Arc::new(stream),
-            waker: Arc::new(None) 
+            event: event,
+            stream: stream,
+            _phantom: PhantomData
         }
     }
 }
 
-impl Future for CuEventFuture {
+impl<'a> Future for CuEventFuture<'a> {
     type Output = CuResult<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -40,12 +40,12 @@ impl Future for CuEventFuture {
                     Poll::Ready(Ok(()))
                 } else {
                     // Register callback to wake the task when event completes
-                    let waker = Arc::new(Some(cx.waker().clone()));
+                    let waker = cx.waker().clone();
                     unsafe {
                         cuLaunchHostFunc(
                             self.stream.get_raw(),
                             Some(wake_callback),
-                            Arc::into_raw(waker) as *mut c_void
+                            &waker as *const _ as *mut c_void
                         );
                     }
                     Poll::Pending
@@ -58,8 +58,8 @@ impl Future for CuEventFuture {
 
 extern "C" fn wake_callback(userData: *mut c_void) {
     unsafe {
-        let waker = Arc::from_raw(userData as *const Option<Waker>);
-        if let Some(w) = &*waker {
+        let waker = userData as *const Waker;
+        if let w = &*waker {
             w.wake_by_ref();
         }
     }
