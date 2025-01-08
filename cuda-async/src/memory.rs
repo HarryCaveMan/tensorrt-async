@@ -21,7 +21,6 @@ use crate::{
 
 use std::{
     sync::{
-        Arc,
         atomic::{
             AtomicUsize,
             Ordering::SeqCst
@@ -39,19 +38,19 @@ use std::{
     }
 };
 
-pub struct HostDeviceMem {    
+pub struct HostDeviceMem<'stream> {    
     host_ptr: *mut c_void,
     device_ptr: CUdeviceptr,
     size: usize,
     tensor_shape: Vec<usize>,
-    stream: CuStream,
+    stream: &'stream CuStream,
     htod_event: CuEvent,
     dtoh_event: CuEvent,
     dtod_event: CuEvent
 }
 
-impl HostDeviceMem {
-    pub fn new<T>(size:usize,stream: &CuStream) -> CuResult<Self> 
+impl<'stream> HostDeviceMem<'stream> {
+    pub fn new<T>(size:usize, stream: &'stream CuStream) -> CuResult<Self> 
     {
         let mut host_ptr: *mut c_void = null_mut();
         let mut device_ptr: CUdeviceptr = 0;
@@ -72,7 +71,7 @@ impl HostDeviceMem {
                         device_ptr: device_ptr,
                         size: size,
                         tensor_shape: Vec::<usize>::new(),
-                        stream: stream.clone(),
+                        stream: stream,
                         htod_event: htod_event,
                         dtoh_event: dtoh_event,
                         dtod_event: dtod_event
@@ -207,7 +206,7 @@ impl HostDeviceMem {
         }
     }
 
-    pub unsafe fn move_on_device_async(&self, dst: &mut HostDeviceMem) -> CUresult
+    pub unsafe fn move_on_device_async(&self, dst: &'stream mut HostDeviceMem<'_>) -> CUresult
     {
         let dtod_result: CUresult = cuMemcpyDtoDAsync_v2(
                 dst.device_ptr(),
@@ -219,7 +218,7 @@ impl HostDeviceMem {
         dtod_result
     }
 
-    pub async fn move_on_device(&self, dst: &mut HostDeviceMem) -> CuResult<()>
+    pub async fn move_on_device(&self, dst: &mut HostDeviceMem<'_>) -> CuResult<()>
     {
         let dtod_async_res: CUresult = unsafe { self.move_on_device_async(dst) };
         let event: CuEvent = self.dtod_event.clone();
@@ -240,7 +239,7 @@ impl HostDeviceMem {
     }
 }
 
-impl Drop for HostDeviceMem {
+impl<'stream> Drop for HostDeviceMem<'stream> {
     fn drop(&mut self) 
     {
         unsafe {

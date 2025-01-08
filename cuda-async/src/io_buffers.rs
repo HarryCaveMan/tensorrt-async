@@ -1,8 +1,10 @@
-use tokio::sync::{Mutex,OwnedMutexGuard};
 use ndarray::{ArrayD};
 use crate::{
     memory::HostDeviceMem,
-    taint::Taint,
+    utils::{
+        Taint,
+        Guard
+    },
     cu_rs::{
         stream::CuStream,
         event::CuEvent,
@@ -20,43 +22,33 @@ use std::{
     }
 };
 
-pub struct IOBuffers {
-    input: HostDeviceMem,
-    output: HostDeviceMem,
-    guard: Arc<Mutex<()>>,
+pub struct IOBuffers<'stream> {
+    input: HostDeviceMem<'stream>,
+    output: HostDeviceMem<'stream>,
+    guard: Guard,
     taints: Arc<AtomicUsize>
 }
 
-impl IOBuffers {
-    pub fn new<T>(input_size: usize, output_size: usize, stream: &CuStream) -> CuResult<Self> {
+impl<'stream> IOBuffers<'stream> {
+    pub fn new<T>(input_size: usize, output_size: usize, stream: &'stream CuStream) -> CuResult<Self> {
         let input = HostDeviceMem::new::<T>(input_size, stream)?;
         let output = HostDeviceMem::new::<T>(output_size, stream)?;
-        let guard = Arc::new(Mutex::new(()));
         Ok(Self {
             input,
             output,
-            guard,
-            taints: AtomicUsize::new(0).into()
+            guard: Guard::new(),
+            taints: Arc::new(AtomicUsize::new(0))
         })
     }
 
-    pub async fn with_guard<F, Fut, R>(&self, size: usize, func: F) -> R
-    where
-        F: FnOnce(&Self) -> Fut,
-        Fut: Future<Output = R>,
-    {
-        let _taint = Taint::new(Arc::clone(&self.taints), size);
-        let _guard = self.guard.clone().lock_owned().await;
-        func(&self).await
-    }
 
-    pub async fn with_guard_mut<'a, F, Fut, R>(&'a mut self, size: usize, func: F) -> R
+    pub async fn with_guard_mut<'buf, F, Fut, R>(&'buf mut self, size: usize, func: F) -> R
     where
-        F: FnOnce(&'a mut Self) -> Fut,
-        Fut: Future<Output = R> + 'a,
+        F: FnOnce(&'buf mut Self) -> Fut,
+        Fut: Future<Output = R> + 'buf,
     {
-        let _taint = Taint::new(Arc::clone(&self.taints), size);
-        let _guard = self.guard.clone().lock_owned().await;
+        let _taint = Taint::new(self.taints.clone(), size);
+        let _guard = self.guard.lock().await;
         func(self).await
     }    
 
@@ -68,11 +60,11 @@ impl IOBuffers {
         &self.output
     }
 
-    pub fn input_mut(&mut self) -> &mut HostDeviceMem {
+    pub fn input_mut(&'stream mut self) -> &'stream mut HostDeviceMem<'stream> {
         &mut self.input
     }
 
-    pub fn output_mut(&mut self) -> &mut HostDeviceMem {
+    pub fn output_mut(&'stream mut self) -> &'stream mut HostDeviceMem<'stream> {
         &mut self.output
     }
 
