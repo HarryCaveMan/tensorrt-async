@@ -14,13 +14,14 @@ use std::{
     pin::Pin
 };
 
-pub struct CuEventFuture<'a> {
+pub struct CuEventFuture<'context> {
     event: CuEvent,
     stream: CuStream,
-    _phantom: PhantomData<&'a ()>
+    // exists purely to hold the lifetime prameter
+    _phantom: PhantomData<&'context ()>
 }
 
-impl<'a> CuEventFuture<'a> {
+impl<'context> CuEventFuture<'context> {
     pub fn new(event: CuEvent, stream: CuStream) -> Self {
         Self { 
             event: event,
@@ -30,7 +31,7 @@ impl<'a> CuEventFuture<'a> {
     }
 }
 
-impl<'a> Future for CuEventFuture<'a> {
+impl<'context> Future for CuEventFuture<'context> {
     type Output = CuResult<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
