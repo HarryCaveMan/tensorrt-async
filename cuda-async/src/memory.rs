@@ -159,8 +159,8 @@ impl<'stream> HostDeviceMem<'stream> {
     pub async fn htod(&self) -> CuResult<()>
     {
         let htod_async_res: CUresult = unsafe { self.htod_async() };
-        let event: CuEvent = self.htod_event.clone();
-        let stream: CuStream = self.stream.clone();
+        let event = &self.htod_event;
+        let stream = &self.stream;
         match wrap_async!(
             htod_async_res,
             event,
@@ -168,8 +168,10 @@ impl<'stream> HostDeviceMem<'stream> {
         )
         {
             Ok(future) => {
-                future.await;
-                Ok(())
+                match future.await {
+                    Ok(_) => Ok(()),
+                    Err(cuErr) => Err(cuErr)
+                }
             }
             Err(cuErr) => Err(cuErr)
         }
@@ -190,8 +192,8 @@ impl<'stream> HostDeviceMem<'stream> {
     pub async fn dtoh(&self) -> CuResult<()>
     {
         let  dtoh_async_res: CUresult = unsafe { self.dtoh_async() };
-        let event: CuEvent = self.dtoh_event.clone();
-        let stream: CuStream = self.stream.clone();
+        let event = &self.dtoh_event;
+        let stream = &self.stream;
         match wrap_async!(
             dtoh_async_res,
             event,
@@ -199,8 +201,10 @@ impl<'stream> HostDeviceMem<'stream> {
         )
         {
             Ok(future) => {
-                future.await;
-                Ok(())
+                match future.await {
+                    Ok(_) => Ok(()),
+                    Err(cuErr) => Err(cuErr)
+                }
             }
             Err(cuErr) => Err(cuErr)
         }
@@ -221,8 +225,8 @@ impl<'stream> HostDeviceMem<'stream> {
     pub async fn move_on_device(&self, dst: &mut HostDeviceMem<'_>) -> CuResult<()>
     {
         let dtod_async_res: CUresult = unsafe { self.move_on_device_async(dst) };
-        let event: CuEvent = self.dtod_event.clone();
-        let stream: CuStream = self.stream.clone();
+        let event = &self.dtod_event;
+        let stream = &self.stream;
         match wrap_async!(
             dtod_async_res,
             event,
@@ -230,9 +234,13 @@ impl<'stream> HostDeviceMem<'stream> {
         )
         {
             Ok(future) => {
-                future.await;
-                dst.set_tensor_shape(&self.tensor_shape);
-                Ok(())
+                match future.await {
+                    Ok(_) => {
+                        dst.set_tensor_shape(&self.tensor_shape);
+                        Ok(())
+                    }
+                    Err(cuErr) => Err(cuErr)
+                }
             }
             Err(cuErr) => Err(cuErr)
         }

@@ -87,10 +87,13 @@ impl<'stream> IOBuffers<'stream> {
         res
     }
 
-    pub async fn pull<T>(&mut self) -> ArrayD<T> 
-    where T: Clone + Default {
-        self.output.dtoh().await;
-        self.output.dump_ndarray()
+    pub async fn pull<T>(&mut self) -> CuResult<ArrayD<T>>
+    where T: Clone + Default
+    {
+        match self.output.dtoh().await {
+            Ok(_) => Ok(self.output.dump_ndarray()),
+            Err(e) => Err(e)
+        }  
     }
 
     pub fn set_input_shape(&mut self, shape: &[usize]) {
