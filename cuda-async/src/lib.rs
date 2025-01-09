@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate enum_primitive;
 
-extern crate cuda_rs_sys as cu_api;
+extern crate cuda_rs_sys as cu_abi;
 
 #[macro_use]
 extern crate cuda_rs as cu_rs;

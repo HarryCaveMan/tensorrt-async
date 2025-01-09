@@ -1,6 +1,6 @@
 use ndarray::{ArrayD,IxDyn};
 use crate::{
-    cu_api::{
+    cu_abi::{
         CUdeviceptr,
         CUresult,
         cuMemAlloc_v2,

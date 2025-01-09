@@ -1,5 +1,5 @@
 use crate::{
-    cu_api::cuLaunchHostFunc,
+    cu_abi::cuLaunchHostFunc,
     cu_rs::{
         stream::CuStream,
         event::CuEvent,
