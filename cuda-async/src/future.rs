@@ -41,12 +41,11 @@ impl<'context> Future for CuEventFuture<'context> {
                     Poll::Ready(Ok(()))
                 } else {
                     // Register callback to wake the task when event completes
-                    let waker = cx.waker().clone();
                     unsafe {
                         cuLaunchHostFunc(
                             self.stream.get_raw(),
                             Some(wake_callback),
-                            &waker as *const _ as *mut c_void
+                            cx.waker() as *const _ as *mut c_void
                         );
                     }
                     Poll::Pending
