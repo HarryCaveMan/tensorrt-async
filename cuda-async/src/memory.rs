@@ -20,6 +20,7 @@ use crate::{
 };
 
 use std::{
+    collections::HashMap,
     sync::{
         atomic::{
             AtomicUsize,
@@ -111,6 +112,38 @@ impl<'stream> HostDeviceMem<'stream> {
         self.tensor_shape = shape.clone();
     }
 
+    pub fn load_raw<T: Copy>(&mut self, src: &[T], shape: &[usize]) -> CuResult<()> {
+        let size = shape.iter().product::<usize>() * size_of::<T>();
+        
+        if size > self.size {
+            return Err(CuError::InvalidValue);
+        }
+
+        unsafe {
+            copy_nonoverlapping(
+                src.as_ptr() as *const c_void,
+                self.host_ptr,
+                size
+            );
+        }        
+        self.tensor_shape = Vec::from(shape);
+        Ok(())
+    }
+
+    // pub fn dump_raw<T: Copy>(&self) -> Vec<T> {
+    //     let size = self.tensor_shape.iter().product::<usize>() * size_of::<T>();
+    //     let mut dst: Vec<T> = Vec::with_capacity(size);
+    //     unsafe {
+    //         copy_nonoverlapping(
+    //             self.host_ptr,
+    //             dst.as_mut_ptr() as *mut c_void,
+    //             self.size
+    //         );
+    //         dst.set_len(size);
+    //     }
+    //     dst
+    // }
+
     pub fn load_ndarray<T>(&mut self, src: &ArrayD<T>) -> CuResult<()>
     where T: Clone
     {
@@ -130,7 +163,7 @@ impl<'stream> HostDeviceMem<'stream> {
     }
 
     pub fn dump_ndarray<T>(&self) -> ArrayD<T>
-    where T: Clone + Default 
+    where T: Clone + Default
     {        
         let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(&self.tensor_shape));
         let array_size: usize = array.len() * size_of::<T>();

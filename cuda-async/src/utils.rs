@@ -1,9 +1,12 @@
 use tokio::sync::{Mutex,OwnedMutexGuard};
-use std::sync::{
-    Arc,
-    atomic::{
-        AtomicUsize,
-        Ordering::SeqCst
+use std::{
+    future::Future,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicUsize,
+            Ordering::SeqCst
+        }
     }
 };
 
@@ -36,7 +39,14 @@ impl Guard {
         }
     }
 
-    pub async fn lock(&self) -> OwnedMutexGuard<()> {
-        self.mutex.clone().lock_owned().await
+    pub async fn with_lock<F, Fut, R>(&self, f: F) -> R 
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = R>,
+    {
+        let lock = self.mutex.clone().lock_owned().await;
+        let res = f().await;
+        drop(lock);
+        res
     }
 }
