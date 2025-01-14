@@ -10,7 +10,6 @@ use std::{
     future::Future,
     ffi::c_void,
     task::{Context, Poll, Waker},
-    marker::PhantomData,
     pin::Pin
 };
 
@@ -27,17 +26,14 @@ If the event has not occured, it:
 
 pub struct CuEventFuture<'context> {
     event: &'context CuEvent,
-    stream: &'context CuStream,
-    // exists purely to hold the lifetime prameter
-    _phantom: PhantomData<&'context ()>
+    stream: &'context CuStream
 }
 
 impl<'context> CuEventFuture<'context> {
     pub fn new(event: &'context CuEvent, stream: &'context CuStream) -> Self {
         Self { 
             event: event,
-            stream: stream,
-            _phantom: PhantomData
+            stream: stream
         }
     }
 }
