@@ -1,7 +1,7 @@
 use ndarray::{ArrayD};
 use crate::{
     memory::HostDeviceMem,
-    utils::{
+    atomics::{
         Taint,
         Guard
     },
@@ -162,6 +162,30 @@ impl<'stream> IOBuffers<'stream> {
     }
 }
 
-// struct IOBufferPool<'stream> {
-//     pool: Vec<IOBuffers>
-// }
+pub struct IOBufferPool<'stream> {
+    pool: Vec<IOBuffers<'stream>>
+}
+
+impl<'stream> IOBufferPool<'stream> {
+    pub fn new<T>(num_buffers: usize, inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: &'stream CuStream) -> CuResult<Self> {
+        let mut pool = Vec::new();
+        for _ in 0..num_buffers {
+            pool.push(IOBuffers::new::<T>(inputs.clone(), outputs.clone(), stream)?);
+        }
+        Ok(Self {
+            pool
+        })
+    }
+
+    pub async fn with_buffers<'buf, F, Fut, R>(&'buf self, size: usize, func: F) -> R
+    where
+        F: FnOnce(&'buf UnsafeIOBuffers<'stream>) -> Fut,
+        Fut: Future<Output = R> + 'buf,
+    {
+        // get the buffer with the least bytes in queue (taints) and pass the guard
+        let buffer = self.pool.iter()
+            .min_by_key(|buffer| buffer.taints())
+            .expect("Empty buffer pool not supported!");
+        buffer.with_guard(size, |buf| func(buf)).await
+    }
+}
