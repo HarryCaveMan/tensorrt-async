@@ -93,7 +93,7 @@ impl<'stream> UnsafeIOBuffers<'stream> {
     where T: Clone {
         let mut input = self.input_mut(name)?;
         input.load_ndarray(src)?;
-        input.set_tensor_shape(&src.shape().to_vec().clone());
+        input.set_shape(&src.shape().to_vec().clone());
         match input.htod().await {
             Ok(_) => {
                 Ok(())
@@ -109,7 +109,7 @@ impl<'stream> UnsafeIOBuffers<'stream> {
     pub async fn itod<'lock>(&'lock self, input_name: &str, output_name: &str) -> CuResult<()> {
         let input = self.input(input_name)?;
         let mut output = self.output_mut(output_name)?;
-        output.set_tensor_shape(&input.tensor_shape().clone());
+        output.set_shape(&input.shape().clone());
         match input.move_on_device(&mut output).await {
             Ok(_) => Ok(()),
             Err(e) => {

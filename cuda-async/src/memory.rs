@@ -43,7 +43,7 @@ pub struct HostDeviceMem<'stream> {
     host_ptr: *mut c_void,
     device_ptr: CUdeviceptr,
     size: usize,
-    tensor_shape: Vec<usize>,
+    shape: Vec<usize>,
     stream: &'stream CuStream,
     htod_event: CuEvent,
     dtoh_event: CuEvent,
@@ -71,7 +71,7 @@ impl<'stream> HostDeviceMem<'stream> {
                         host_ptr: host_ptr, 
                         device_ptr: device_ptr,
                         size: size,
-                        tensor_shape: Vec::<usize>::new(),
+                        shape: Vec::<usize>::new(),
                         stream: stream,
                         htod_event: htod_event,
                         dtoh_event: dtoh_event,
@@ -104,12 +104,12 @@ impl<'stream> HostDeviceMem<'stream> {
         unsafe { from_raw_parts_mut(self.host_ptr as *mut T, size) }
     }
 
-    pub fn tensor_shape(&self) -> &Vec<usize> {
-        &self.tensor_shape
+    pub fn shape(&self) -> &Vec<usize> {
+        &self.shape
     }
 
-    pub fn set_tensor_shape(&mut self, shape: &Vec<usize>) {
-        self.tensor_shape = shape.clone();
+    pub fn set_shape(&mut self, shape: &Vec<usize>) {
+        self.shape = shape.clone();
     }
 
     pub fn load_raw<T: Copy>(&mut self, src: &[T], shape: &[usize]) -> CuResult<()> {
@@ -126,23 +126,9 @@ impl<'stream> HostDeviceMem<'stream> {
                 size
             );
         }        
-        self.tensor_shape = Vec::from(shape);
+        self.shape = Vec::from(shape);
         Ok(())
     }
-
-    // pub fn dump_raw<T: Copy>(&self) -> Vec<T> {
-    //     let size = self.tensor_shape.iter().product::<usize>() * size_of::<T>();
-    //     let mut dst: Vec<T> = Vec::with_capacity(size);
-    //     unsafe {
-    //         copy_nonoverlapping(
-    //             self.host_ptr,
-    //             dst.as_mut_ptr() as *mut c_void,
-    //             self.size
-    //         );
-    //         dst.set_len(size);
-    //     }
-    //     dst
-    // }
 
     pub fn load_ndarray<T>(&mut self, src: &ArrayD<T>) -> CuResult<()>
     where T: Clone
@@ -151,7 +137,7 @@ impl<'stream> HostDeviceMem<'stream> {
         if size > self.size {
             return Err(CuError::InvalidValue);
         }
-        self.set_tensor_shape(&Vec::<usize>::from(src.shape()));
+        self.set_shape(&Vec::<usize>::from(src.shape()));
         unsafe {
             copy_nonoverlapping(
                 src.as_ptr() as *const c_void,
@@ -165,7 +151,7 @@ impl<'stream> HostDeviceMem<'stream> {
     pub fn dump_ndarray<T>(&self) -> ArrayD<T>
     where T: Clone + Default
     {        
-        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(&self.tensor_shape));
+        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(&self.shape));
         let array_size: usize = array.len() * size_of::<T>();
         unsafe {
             copy_nonoverlapping(
@@ -269,7 +255,7 @@ impl<'stream> HostDeviceMem<'stream> {
             Ok(future) => {
                 match future.await {
                     Ok(_) => {
-                        dst.set_tensor_shape(&self.tensor_shape);
+                        dst.set_shape(&self.shape);
                         Ok(())
                     }
                     Err(cuErr) => Err(cuErr)
