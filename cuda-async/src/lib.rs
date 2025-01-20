@@ -16,6 +16,7 @@ pub (crate) mod future;
 
 // public interface
 pub mod memory;
+pub mod stream;
 pub mod io_buffers;
 pub mod atomics;
 pub use cu_rs::{
@@ -42,6 +43,7 @@ mod tests {
             IOBuffers,
             IOBufferPool
         },
+        stream::CuStreamPool,
         CuResult,
         CuError,
         CuStream
@@ -75,6 +77,11 @@ mod tests {
         test_buffer_pool().await.unwrap();
     }
 
+    #[tokio::test]
+    async fn stream_pool_tests<'tests>() {
+        test_stream_pool().await.unwrap();
+    }
+
     // ensure the buffer guard can be held concurrently (multiple threads awaiting the same guard)
     async fn test_concurrent_buffer_guards<'tests>() -> CuResult<()> {
         println!("Starting concurrent buffer guard test");
@@ -102,7 +109,7 @@ mod tests {
                     ("test_output",output_buffer_size),
                 ]
             ),
-            &stream
+            stream.clone()
         )?;
         let arr1_fut = io_buffers.with_guard(
             arr1.len() * size_of::<f32>(),
@@ -162,7 +169,7 @@ mod tests {
                     ("test_output",output_buffer_size),
                 ]
             ),
-            &stream
+            stream.clone()
         )?;
         let arr1_fut = pool.with_buffers(
             arr1.len() * size_of::<f32>(),
@@ -210,6 +217,87 @@ mod tests {
         assert_eq!(*arr3, arr3_after_roundtrip);
         assert_eq!(*arr4, arr4_after_roundtrip);
         println!("Buffer pool test passed!");
+        Ok(())
+    }
+
+    async fn test_stream_pool<'tests>() -> CuResult<()> {
+        println!("Starting stream pool test");
+        init_cuda();
+        let device = CuDevice::new(0)?;
+        let _ctx = CuContext::new(&device)?;
+        let test_input_max_shape = [16, 512];
+        let test_output_max_shape = [16, 512,];
+        let input_buffer_size: usize = test_input_max_shape.iter().product::<usize>() * size_of::<f32>();
+        let output_buffer_size: usize = test_output_max_shape.iter().product::<usize>() * size_of::<f32>();
+        let arr1_shape = [4, 68];
+        let arr2_shape = [8, 39];
+        let arr3_shape = [16, 512];
+        let arr4_shape = [16, 128];
+        let arr1 = Pin::new(Box::new(ArrayD::<f32>::ones(IxDyn(&arr1_shape))));
+        let arr2 = Pin::new(Box::new(ArrayD::<f32>::zeros(IxDyn(&arr2_shape))));
+        let arr3 = Pin::new(Box::new(ArrayD::<f32>::ones(IxDyn(&arr3_shape))));
+        let arr4 = Pin::new(Box::new(ArrayD::<f32>::zeros(IxDyn(&arr4_shape))));
+        let start = Instant::now();
+        let stream_pool = CuStreamPool::new::<f32>(
+            2,
+            1,
+            HashMap::from_iter(
+                vec![
+                    ("test_input",input_buffer_size),
+                ]
+            ),
+            HashMap::from_iter(
+                vec![
+                    ("test_output",output_buffer_size),
+                ]
+            )
+        )?;
+        let arr1_fut = stream_pool.stream_with_buffers(
+            arr1.len() * size_of::<f32>(),
+            |io_buf| async {
+                println!("SP ID 1 Start: {}",start.elapsed().as_millis());
+                io_buf.push::<f32>("test_input",&arr1).await?;
+                io_buf.itod("test_input","test_output").await?;
+                println!("SP ID 1 About to release guard: {}",start.elapsed().as_millis());
+                io_buf.pull::<f32>("test_output").await
+            }
+        );
+        let arr2_fut = stream_pool.stream_with_buffers(
+            arr2.len() * size_of::<f32>(),
+            |io_buf| async {
+                println!("SP ID 2 Start: {}",start.elapsed().as_millis());
+                io_buf.push::<f32>("test_input",&arr2).await?;
+                io_buf.itod("test_input","test_output").await?;
+                println!("SP ID 2 About to release guard: {}",start.elapsed().as_millis());
+                io_buf.pull::<f32>("test_output").await
+            }
+        );
+        let arr3_fut = stream_pool.stream_with_buffers(
+            arr3.len() * size_of::<f32>(),
+            |io_buf| async {
+                println!("SP ID 3 Start: {}",start.elapsed().as_millis());
+                io_buf.push::<f32>("test_input",&arr3).await?;
+                io_buf.itod("test_input","test_output").await?;
+                println!("SP ID 3 About to release guard: {}",start.elapsed().as_millis());
+                io_buf.pull::<f32>("test_output").await
+            }
+        );
+        let arr4_fut = stream_pool.stream_with_buffers(
+            arr4.len() * size_of::<f32>(),
+            |io_buf| async {
+                println!("SP ID 4 Start: {}",start.elapsed().as_millis());
+                io_buf.push::<f32>("test_input",&arr4).await?;
+                io_buf.itod("test_input","test_output").await?;
+                println!("SP ID 4 About to release guard: {}",start.elapsed().as_millis());
+                io_buf.pull::<f32>("test_output").await
+            }
+        );
+        let (arr1_after_roundtrip, arr2_after_roundtrip, arr3_after_roundtrip, arr4_after_roundtrip): (ArrayD<f32>, ArrayD<f32>, ArrayD<f32>, ArrayD<f32>) = try_join!(arr1_fut, arr2_fut, arr3_fut, arr4_fut)?;
+        assert_eq!(*arr1, arr1_after_roundtrip);
+        assert_eq!(*arr2, arr2_after_roundtrip);
+        assert_eq!(*arr3, arr3_after_roundtrip);
+        assert_eq!(*arr4, arr4_after_roundtrip);
+        println!("Stream pool test passed!");
         Ok(())
     }
 }

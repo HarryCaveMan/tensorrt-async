@@ -20,6 +20,7 @@ use crate::{
 };
 
 use std::{
+    marker::PhantomData,
     collections::HashMap,
     sync::{
         atomic::{
@@ -44,14 +45,15 @@ pub struct HostDeviceMem<'stream> {
     device_ptr: CUdeviceptr,
     size: usize,
     shape: Vec<usize>,
-    stream: &'stream CuStream,
+    stream: CuStream,
     htod_event: CuEvent,
     dtoh_event: CuEvent,
-    dtod_event: CuEvent
+    dtod_event: CuEvent,
+    _phantom: PhantomData<&'stream ()>
 }
 
 impl<'stream> HostDeviceMem<'stream> {
-    pub fn new<T>(size:usize, stream: &'stream CuStream) -> CuResult<Self> 
+    pub fn new<T>(size:usize, stream: CuStream) -> CuResult<Self> 
     {
         let mut host_ptr: *mut c_void = null_mut();
         let mut device_ptr: CUdeviceptr = 0;
@@ -75,7 +77,8 @@ impl<'stream> HostDeviceMem<'stream> {
                         stream: stream,
                         htod_event: htod_event,
                         dtoh_event: dtoh_event,
-                        dtod_event: dtod_event
+                        dtod_event: dtod_event,
+                        _phantom: PhantomData
                     },
                     device_alloc_res
                 )
