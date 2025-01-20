@@ -53,7 +53,7 @@ pub struct HostDeviceMem<'stream> {
 }
 
 impl<'stream> HostDeviceMem<'stream> {
-    pub fn new<T>(size:usize, stream: CuStream) -> CuResult<Self> 
+    pub fn new(size:usize, stream: CuStream) -> CuResult<Self> 
     {
         let mut host_ptr: *mut c_void = null_mut();
         let mut device_ptr: CUdeviceptr = 0;

@@ -36,14 +36,14 @@ unsafe impl<'stream> Send for UnsafeIOBuffers<'stream> {}
 unsafe impl<'stream> Sync for UnsafeIOBuffers<'stream> {}
 
 impl<'stream> UnsafeIOBuffers<'stream> {
-    pub fn new<T>(inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
+    pub fn new(inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
         let mut input_buffers = HashMap::new();
         let mut output_buffers = HashMap::new();
         for (name, size) in inputs {
-            input_buffers.insert(name, HostDeviceMem::new::<T>(size, stream.clone())?);
+            input_buffers.insert(name, HostDeviceMem::new(size, stream.clone())?);
         }
         for (name, size) in outputs {
-            output_buffers.insert(name, HostDeviceMem::new::<T>(size, stream.clone())?);
+            output_buffers.insert(name, HostDeviceMem::new(size, stream.clone())?);
         }
         Ok(Self {
             inputs: RefCell::new(input_buffers),
@@ -139,9 +139,9 @@ pub struct IOBuffers<'stream> {
 }
 
 impl<'stream> IOBuffers<'stream> {
-    pub fn new<T>(inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
+    pub fn new(inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
         Ok(Self {
-            buffers: UnsafeIOBuffers::new::<T>(inputs, outputs, stream)?,
+            buffers: UnsafeIOBuffers::new(inputs, outputs, stream)?,
             _phantom: PhantomData
         })
     }
@@ -167,10 +167,10 @@ pub struct IOBufferPool<'stream> {
 }
 
 impl<'stream> IOBufferPool<'stream> {
-    pub fn new<T>(num_buffers: usize, inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
+    pub fn new(num_buffers: usize, inputs: HashMap<&'stream str, usize>, outputs: HashMap<&'stream str, usize>, stream: CuStream) -> CuResult<Self> {
         let mut pool = Vec::new();
         for _ in 0..num_buffers {
-            pool.push(IOBuffers::new::<T>(inputs.clone(), outputs.clone(), stream.clone())?);
+            pool.push(IOBuffers::new(inputs.clone(), outputs.clone(), stream.clone())?);
         }
         Ok(Self {
             pool

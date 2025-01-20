@@ -98,7 +98,7 @@ mod tests {
         let arr1 = Pin::new(Box::new(ArrayD::<f32>::ones(IxDyn(&arr1_shape))));
         let arr2 = Pin::new(Box::new(ArrayD::<f32>::zeros(IxDyn(&arr2_shape))));
         let start = Instant::now();
-        let io_buffers = IOBuffers::new::<f32>(
+        let io_buffers = IOBuffers::new(
             HashMap::from_iter(
                 vec![
                     ("test_input",input_buffer_size),
@@ -157,7 +157,7 @@ mod tests {
         let arr3 = Pin::new(Box::new(ArrayD::<f32>::ones(IxDyn(&arr3_shape))));
         let arr4 = Pin::new(Box::new(ArrayD::<f32>::zeros(IxDyn(&arr4_shape))));
         let start = Instant::now();
-        let pool = IOBufferPool::new::<f32>(
+        let pool = IOBufferPool::new(
             2,
             HashMap::from_iter(
                 vec![
@@ -238,7 +238,7 @@ mod tests {
         let arr3 = Pin::new(Box::new(ArrayD::<f32>::ones(IxDyn(&arr3_shape))));
         let arr4 = Pin::new(Box::new(ArrayD::<f32>::zeros(IxDyn(&arr4_shape))));
         let start = Instant::now();
-        let stream_pool = CuStreamPool::new::<f32>(
+        let stream_pool = CuStreamPool::new(
             2,
             1,
             HashMap::from_iter(

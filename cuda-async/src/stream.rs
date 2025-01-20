@@ -34,9 +34,9 @@ pub struct CuStreamWithBuffers<'context> {
 }
 
 impl<'context> CuStreamWithBuffers<'context> {
-    pub fn new<T>(num_buffers: usize, inputs: HashMap<&'context str, usize>, outputs: HashMap<&'context str, usize>) -> CuResult<Self> {
+    pub fn new(num_buffers: usize, inputs: HashMap<&'context str, usize>, outputs: HashMap<&'context str, usize>) -> CuResult<Self> {
         let stream = CuStream::new()?;
-        let buffers = IOBufferPool::new::<T>(
+        let buffers = IOBufferPool::new(
             num_buffers,
             inputs,
             outputs,
@@ -68,10 +68,10 @@ pub struct CuStreamPool<'context> {
 }
 
 impl<'context> CuStreamPool<'context> {
-    pub fn new<T>(num_streams: usize, buffers_per_stream: usize, inputs: HashMap<&'context str, usize>, outputs: HashMap<&'context str, usize>) -> CuResult<Self> {
+    pub fn new(num_streams: usize, buffers_per_stream: usize, inputs: HashMap<&'context str, usize>, outputs: HashMap<&'context str, usize>) -> CuResult<Self> {
         let mut streams = Vec::new();
         for _ in 0..num_streams {
-            streams.push(CuStreamWithBuffers::new::<T>(buffers_per_stream, inputs.clone(), outputs.clone())?);
+            streams.push(CuStreamWithBuffers::new(buffers_per_stream, inputs.clone(), outputs.clone())?);
         }
         Ok(Self {
             streams
