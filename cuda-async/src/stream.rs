@@ -43,7 +43,7 @@ impl<'context> CuStreamWithBuffers<'context> {
             stream.clone()
         )?;
         Ok(Self {
-            stream: stream.clone(),
+            stream: stream,
             buffers: buffers,
             taints: Arc::new(AtomicUsize::new(0))
         })
@@ -51,11 +51,11 @@ impl<'context> CuStreamWithBuffers<'context> {
 
     pub async fn with_buffers<'buf, F, Fut, R>(&'buf self, size: usize, func: F) -> R
     where
-        F: FnOnce(&'buf UnsafeIOBuffers<'context>) -> Fut,
+        F: FnOnce(&'buf CuStream, &'buf UnsafeIOBuffers<'context>) -> Fut,
         Fut: Future<Output = R> + 'buf
     {
         let _taint = Taint::new(self.taints.clone(), size);
-        self.buffers.with_buffers(size, |buf| func(buf)).await
+        self.buffers.with_buffers(size, |buf| func(&self.stream, buf)).await
     }
 
     pub fn taints(&self) -> usize {
@@ -80,10 +80,10 @@ impl<'context> CuStreamPool<'context> {
 
     pub async fn stream_with_buffers<'buf, F, Fut, R>(&'buf self, size: usize, func: F) -> R
     where
-        F: FnOnce(&'buf UnsafeIOBuffers<'context>) -> Fut,
+        F: FnOnce(&'buf CuStream, &'buf UnsafeIOBuffers<'context>) -> Fut,
         Fut: Future<Output = R> + 'buf 
     {
         let stream = self.streams.iter().min_by_key(|stream| stream.taints()).expect("Empty stream pool not supported!");
-        stream.with_buffers(size, |buf| func(buf)).await
+        stream.with_buffers(size, |stream,buf| func(stream,buf)).await
     }
 }

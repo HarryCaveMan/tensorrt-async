@@ -1,4 +1,5 @@
-use ndarray::{ArrayD};
+use ndarray::{Array};
+use tokio::try_join;
 use crate::{
     memory::HostDeviceMem,
     atomics::{
@@ -26,8 +27,11 @@ use std::{
 };
 
 pub struct UnsafeIOBuffers<'stream> {
+    stream: CuStream,
     inputs: RefCell<HashMap<&'stream str,HostDeviceMem<'stream>>>,
     outputs: RefCell<HashMap<&'stream str,HostDeviceMem<'stream>>>,
+    input_on_device: CuEvent,
+    output_on_host: CuEvent,
     guard: Guard,
     taints: Arc<AtomicUsize>
 }
@@ -46,8 +50,11 @@ impl<'stream> UnsafeIOBuffers<'stream> {
             output_buffers.insert(name, HostDeviceMem::new(size, stream.clone())?);
         }
         Ok(Self {
+            stream,
             inputs: RefCell::new(input_buffers),
             outputs: RefCell::new(output_buffers),
+            input_on_device: CuEvent::new()?,
+            output_on_host: CuEvent::new()?,
             guard: Guard::new(),
             taints: Arc::new(AtomicUsize::new(0))
         })
@@ -85,11 +92,27 @@ impl<'stream> UnsafeIOBuffers<'stream> {
         )
     }
 
+    pub fn inputs(&self) -> Ref<HashMap<&'stream str,HostDeviceMem<'stream>>> {
+        self.inputs.borrow()
+    }
+
+    pub fn outputs(&self) -> Ref<HashMap<&'stream str,HostDeviceMem<'stream>>> {
+        self.outputs.borrow()
+    }
+
+    pub fn inputs_mut(&self) -> RefMut<HashMap<&'stream str,HostDeviceMem<'stream>>> {
+        self.inputs.borrow_mut()
+    }
+
+    pub fn outputs_mut(&self) -> RefMut<HashMap<&'stream str,HostDeviceMem<'stream>>> {
+        self.outputs.borrow_mut()
+    }
+
     pub fn taints(&self) -> usize {
         self.taints.load(SeqCst)
     }
 
-    pub async fn push<'lock,T>(&'lock self, name: &str, src: &ArrayD<T>) -> CuResult<()>
+    pub async fn push<'lock,T>(&'lock self, name: &str, src: &Array<T>) -> CuResult<()>
     where T: Clone {
         let mut input = self.input_mut(name)?;
         input.load_ndarray(src)?;
@@ -103,6 +126,25 @@ impl<'stream> UnsafeIOBuffers<'stream> {
                 Err(e)
             }
         }
+    }
+
+    pub async fn push_inputs<'lock,I>(&'lock self, inputs: HashMap<&'stream str, Array<I>>) -> CuResult<()>
+    where I: Clone 
+    {
+        try_join!(
+            inputs.iter().map(|(name, src)| {
+                let mut input = self.input_mut(name)?;
+                input.load_ndarray(&src)?;
+            })
+        ).map(|_| Ok(())).await?;
+        self.inputs().iter().map(|(name, src)| {
+            let mut input = self.input_mut(name)?;
+            input.htod_async_noevent()?;  
+        })?;
+        self.input_on_device.record(self.stream)?;
+        let event = &self.input_on_device;
+        let stream = &self.stream;
+        wrap_async!(res, event, stream).await?
     }
 
     // input device buffer to output device buffer (input to output device -> itod)
@@ -119,8 +161,8 @@ impl<'stream> UnsafeIOBuffers<'stream> {
         }
     }
 
-    pub async fn pull<'lock,T>(&'lock self, output_name: &str) -> CuResult<ArrayD<T>>
-    where T: Clone + Default
+    pub async fn pull<'lock,O>(&'lock self, output_name: &str) -> CuResult<Array<O>>
+    where O: Clone + Default
     {
         let mut output = self.output_mut(output_name)?;
         match output.dtoh().await {
@@ -130,6 +172,23 @@ impl<'stream> UnsafeIOBuffers<'stream> {
                 Err(e)
             }
         }  
+    }
+
+    pub async fn pull_outputs<'lock,O>(&'lock self) -> CuResult<HashMap<&'stream str,Array<O>>
+    where O: Clone + Default
+    {
+        self.outputs().iter().map(|(name, buffer)| {
+            let mut output = self.output_mut(name)?;
+            output.htod_async_noevent()?;
+        })?;
+        self.output_on_host.record(self.stream)?;
+        let event = &self.output_on_host;
+        let stream = &self.stream;
+        wrap_async!(res, event, stream).await?;
+        let outputs = self.outputs().iter()
+            .map(|(name, output)| (*name, output.dump_ndarray()))
+            .collect::<HashMap<&'stream str, Array<O>>>();
+        Ok(outputs)
     }
 }
 
@@ -155,7 +214,7 @@ impl<'stream> IOBuffers<'stream> {
         F: FnOnce(
             &'buf UnsafeIOBuffers<'stream>,
         ) -> Fut,
-        Fut: Future<Output = R> + 'buf,
+        Fut: Future<Output = R> + 'buf
     {
         let _taint = Taint::new(self.buffers.taints.clone(), size);
         self.buffers.guard.with_lock( || func(&self.buffers)).await
@@ -175,10 +234,6 @@ impl<'stream> IOBufferPool<'stream> {
         Ok(Self {
             pool
         })
-    }
-
-    pub fn empty() -> Self {
-        Self { pool: Vec::new() }
     }
 
     pub async fn with_buffers<'buf, F, Fut, R>(&'buf self, size: usize, func: F) -> R

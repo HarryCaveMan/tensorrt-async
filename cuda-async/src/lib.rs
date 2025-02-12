@@ -254,7 +254,7 @@ mod tests {
         )?;
         let arr1_fut = stream_pool.stream_with_buffers(
             arr1.len() * size_of::<f32>(),
-            |io_buf| async {
+            |stream,io_buf| async {
                 println!("SP ID 1 Start: {}",start.elapsed().as_millis());
                 io_buf.push::<f32>("test_input",&arr1).await?;
                 io_buf.itod("test_input","test_output").await?;
@@ -264,7 +264,7 @@ mod tests {
         );
         let arr2_fut = stream_pool.stream_with_buffers(
             arr2.len() * size_of::<f32>(),
-            |io_buf| async {
+            |stream,io_buf| async {
                 println!("SP ID 2 Start: {}",start.elapsed().as_millis());
                 io_buf.push::<f32>("test_input",&arr2).await?;
                 io_buf.itod("test_input","test_output").await?;
@@ -274,7 +274,7 @@ mod tests {
         );
         let arr3_fut = stream_pool.stream_with_buffers(
             arr3.len() * size_of::<f32>(),
-            |io_buf| async {
+            |stream,io_buf| async {
                 println!("SP ID 3 Start: {}",start.elapsed().as_millis());
                 io_buf.push::<f32>("test_input",&arr3).await?;
                 io_buf.itod("test_input","test_output").await?;
@@ -284,7 +284,7 @@ mod tests {
         );
         let arr4_fut = stream_pool.stream_with_buffers(
             arr4.len() * size_of::<f32>(),
-            |io_buf| async {
+            |stream,io_buf| async {
                 println!("SP ID 4 Start: {}",start.elapsed().as_millis());
                 io_buf.push::<f32>("test_input",&arr4).await?;
                 io_buf.itod("test_input","test_output").await?;

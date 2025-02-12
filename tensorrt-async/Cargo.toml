@@ -1,0 +1,17 @@
+[package]
+name = "cuda-async"
+version = "10.7.0"
+authors = ["Harris Joseph <harris.joseph.088@gmail.com>"]
+description = "A safe, async rust wrapper for CUDA Driver/Runtime APIs"
+repository = "https://github.com/HarryCaveMan/tensorrt-async"
+readme = "README.md"
+keywords = ["cuda", "tensorrt","ffi","async"]
+license = "MIT/Apache-2.0"
+edition = "2025"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cuda-async = { path = "../cuda-async" }
+tensorrt-rs-sys = { package = "tensorrt-rs-sys", version= "10.7.0", git = "https://github.com/HarryCaveMan/tensorrt-rs.git", branch = "upgrade_deprecated" }
+tensorrt = { package = "tensorrt", version= "10.7.0", git = "https://github.com/HarryCaveMan/tensorrt-rs.git", branch = "upgrade_deprecated" }

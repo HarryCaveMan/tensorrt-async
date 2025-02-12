@@ -1,4 +1,4 @@
-use ndarray::{ArrayD,IxDyn};
+use ndarray::{Array,IxDyn};
 use crate::{
     cu_abi::{
         CUdeviceptr,
@@ -133,7 +133,7 @@ impl<'stream> HostDeviceMem<'stream> {
         Ok(())
     }
 
-    pub fn load_ndarray<T>(&mut self, src: &ArrayD<T>) -> CuResult<()>
+    pub fn load_ndarray<T>(&mut self, src: &Array<T>) -> CuResult<()>
     where T: Clone
     {
         let size = src.len() * size_of::<T>();
@@ -151,10 +151,10 @@ impl<'stream> HostDeviceMem<'stream> {
         Ok(())
     }
 
-    pub fn dump_ndarray<T>(&self) -> ArrayD<T>
+    pub fn dump_ndarray<T>(&self) -> Array<T>
     where T: Clone + Default
     {        
-        let mut array: ArrayD<T> = ArrayD::<T>::default(IxDyn(&self.shape));
+        let mut array: Array<T> = Array::<T>::default(IxDyn(&self.shape));
         let array_size: usize = array.len() * size_of::<T>();
         unsafe {
             copy_nonoverlapping(
@@ -164,6 +164,16 @@ impl<'stream> HostDeviceMem<'stream> {
             );
         }
         array
+    }
+
+    pub unsafe fn htod_async_noevent(&self) -> CUresult 
+    {
+        cuMemcpyHtoDAsync_v2(
+                self.device_ptr,
+                self.host_ptr,
+                self.size,
+                self.stream.get_raw()
+        )
     }
 
     pub unsafe fn htod_async(&self) -> CUresult 
@@ -197,6 +207,16 @@ impl<'stream> HostDeviceMem<'stream> {
             }
             Err(cuErr) => Err(cuErr)
         }
+    }
+
+    pub unsafe fn dtoh_async_noevent(&self) -> CUresult
+    {
+        cuMemcpyDtoHAsync_v2(
+                self.host_ptr,
+                self.device_ptr,
+                self.size,
+                self.stream.get_raw()
+        )
     }
 
     pub unsafe fn dtoh_async(&self) -> CUresult

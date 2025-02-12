@@ -14,27 +14,29 @@ use trt{
     }
 };
 use crate::context;
+use std::path::PathBuf; 
 
-struct TRTModel {
+struct TRTModel<'runtime> {
     runtime: Runtime,
     context_pool: Vec<ExecutionContext>
 }
 
-impl TRTmodel {
-    pub fn new(num_contexts: usize,num_streams) -> TRTResult<Self> {
+impl<'runtime> for TRTmodel<'runtime> {
+    pub fn new(path: PathBuf, num_contexts: usize, num_streams: usize, num_buffers_per_stream: usize) -> TRTResult<Self> {
         let runtime = Runtime::new()?;
-        let context_pool = Vec<ExecutionContext>::new();
-        for _ in 0..num_contexts {
-            let context = ExecutionContext::new(&runtime)?;
-            context_pool.push(context);
-        }
-        Ok(Self {
-            runtime,
-            context_pool
-        })
+        let engine = runtime.deserialize_engine(path)?;
+        let context_pool = context::TRTExecPool(
+            &'runtime engine,
+            num_contexts,
+            num_streams,
+            num_buffers_per_stream
+        )
     }
 
-    pub async fn infer(input_tensors: HashMap<String,serde_json::Value>) {
-
+    pub async fn infer<I,O>(&self, inputs: &HashMap<&str, Array<I>) -> TRTResult<O> {
+        let result = self.context_pool.with_context(|context,stream,buf| async {
+            context.execute_v3(inputs).await?
+        }).await?;
+        Ok(result)
     }
 }
