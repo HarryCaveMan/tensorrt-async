@@ -3,7 +3,7 @@
 #[macro_use]
 extern crate enum_primitive;
 
-extern crate cuda_rs_sys as cu_abi;
+extern crate cuda_rs_sys as cu_ffi;
 
 #[macro_use]
 extern crate cuda_rs as cu_rs;
@@ -69,17 +69,26 @@ mod tests {
     }
     #[tokio::test]
     async fn buffer_guard_tests<'tests>() {
-        test_concurrent_buffer_guards().await.unwrap();
+        match test_concurrent_buffer_guards().await {
+            Ok(_) => println!("Concurrent buffer guard test passed!"),
+            Err(e) => panic!("Concurrent buffer guard test failed: {:?}", e),
+        }
     }
 
     #[tokio::test]
     async fn buffer_pool_tests<'tests>() {
-        test_buffer_pool().await.unwrap();
+        match test_buffer_pool().await {
+            Ok(_) => println!("Buffer pool test passed!"),
+            Err(e) => panic!("Buffer pool test failed: {:?}", e),
+        }
     }
 
     #[tokio::test]
     async fn stream_pool_tests<'tests>() {
-        test_stream_pool().await.unwrap();
+        match test_stream_pool().await {
+            Ok(_) => println!("Stream pool test passed!"),
+            Err(e) => panic!("Stream pool test failed: {:?}", e),
+        }
     }
 
     // ensure the buffer guard can be held concurrently (multiple threads awaiting the same guard)
