@@ -12,8 +12,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cuda-rs = "0.1"
-cuda-rs-sys = "0.1"
+cuda-rs = { package = "cuda-rs", version= "13.1", git = "https://github.com/HarryCaveMan/cuda-rs.git", branch = "upgrade_deprecated" }
+cuda-rs-sys = { package = "cuda-rs-sys", version= "0.2", git = "https://github.com/HarryCaveMan/cuda-rs.git", branch = "upgrade_deprecated" }
 enum_primitive = "0.1"
 num-traits = "0.2"
 thiserror = "1"
