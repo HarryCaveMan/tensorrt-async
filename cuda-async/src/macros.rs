@@ -13,7 +13,7 @@ macro_rules! wrap_async {
     ($res:expr,$cuEventClone:ident,$cuStreamClone:ident) => (
         if $res == crate::cu_ffi::cudaError_enum_CUDA_SUCCESS {
             use crate::future::CuEventFuture;
-            Ok(CuEventFuture::new($cuEventClone,$cuStreamClone))
+            CuEventFuture::new($cuEventClone,$cuStreamClone)
         }
         else {
             use crate::cu_rs::error::CuError;

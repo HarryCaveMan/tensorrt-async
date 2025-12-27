@@ -9,8 +9,7 @@ use crate::{
         cuMemcpyHtoDAsync_v2,
         cuMemcpyDtoDAsync_v2,
         cuMemFree_v2,
-        cuMemFreeHost,
-        cuEventDestroy_v2
+        cuMemFreeHost
     },
     cu_rs::{
         stream::CuStream,
@@ -21,13 +20,6 @@ use crate::{
 
 use std::{
     marker::PhantomData,
-    collections::HashMap,
-    sync::{
-        atomic::{
-            AtomicUsize,
-            Ordering::SeqCst
-        }
-    },
     ffi::c_void,
     ptr::{
         null_mut,
@@ -83,7 +75,7 @@ impl<'stream> HostDeviceMem<'stream> {
                     device_alloc_res
                 )
             }
-            Err(cuErr) => Err(cuErr)
+            Err(cu_err) => Err(cu_err)
         }
     }
 
@@ -174,7 +166,6 @@ impl<'stream> HostDeviceMem<'stream> {
                 self.size,
                 self.stream.get_raw()
         );
-        self.htod_event.record(&self.stream);
         htod_res
     }
 
@@ -192,10 +183,10 @@ impl<'stream> HostDeviceMem<'stream> {
             Ok(future) => {
                 match future.await {
                     Ok(_) => Ok(()),
-                    Err(cuErr) => Err(cuErr)
+                    Err(cu_err) => Err(cu_err)
                 }
             }
-            Err(cuErr) => Err(cuErr)
+            Err(cu_err) => Err(cu_err)
         }
     }
 
@@ -207,7 +198,6 @@ impl<'stream> HostDeviceMem<'stream> {
                 self.size,
                 self.stream.get_raw()
         );
-        self.dtoh_event.record(&self.stream);
         dtoh_res
     }
 
@@ -225,10 +215,10 @@ impl<'stream> HostDeviceMem<'stream> {
             Ok(future) => {
                 match future.await {
                     Ok(_) => Ok(()),
-                    Err(cuErr) => Err(cuErr)
+                    Err(cu_err) => Err(cu_err)
                 }
             }
-            Err(cuErr) => Err(cuErr)
+            Err(cu_err) => Err(cu_err)
         }
     }
 
@@ -240,7 +230,6 @@ impl<'stream> HostDeviceMem<'stream> {
                 self.size,
                 self.stream.get_raw()
         );
-        self.dtod_event.record(&self.stream);
         dtod_result
     }
 
@@ -261,10 +250,10 @@ impl<'stream> HostDeviceMem<'stream> {
                         dst.set_shape(&self.shape);
                         Ok(())
                     }
-                    Err(cuErr) => Err(cuErr)
+                    Err(cu_err) => Err(cu_err)
                 }
             }
-            Err(cuErr) => Err(cuErr)
+            Err(cu_err) => Err(cu_err)
         }
     }
 }

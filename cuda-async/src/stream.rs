@@ -4,17 +4,14 @@ use crate::{
         UnsafeIOBuffers
     },
     atomics::{
-        Taint,
-        Guard
+        Taint
     },
     cu_rs::{
         stream::CuStream,
-        event::CuEvent,
-        error::{CuResult, CuError}
+        error::CuResult
     }
 };
 use std::{
-    pin::Pin,
     collections::HashMap,
     future::Future,
     sync::{

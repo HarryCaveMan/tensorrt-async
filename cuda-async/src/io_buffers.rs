@@ -7,7 +7,6 @@ use crate::{
     },
     cu_rs::{
         stream::CuStream,
-        event::CuEvent,
         error::{CuResult, CuError}
     }
 };

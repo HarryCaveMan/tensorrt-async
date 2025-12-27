@@ -1,11 +1,7 @@
-
-
-#[macro_use]
 extern crate enum_primitive;
 
 extern crate cuda_rs_sys as cu_ffi;
 
-#[macro_use]
 extern crate cuda_rs as cu_rs;
 
 #[macro_use]
@@ -45,14 +41,12 @@ mod tests {
         },
         stream::CuStreamPool,
         CuResult,
-        CuError,
         CuStream
     };
     use tokio::{
-        try_join,
-        runtime::Runtime
+        try_join
     };
-    use ndarray::{ArrayD, IxDyn, s};
+    use ndarray::{ArrayD, IxDyn};
     use std::time::Instant;
     use std::collections::HashMap;
     use std::sync::Once;

@@ -3,7 +3,7 @@ use crate::{
     cu_rs::{
         stream::CuStream,
         event::CuEvent,
-        error::{CuResult, CuError}
+        error::CuResult
     }
 };
 use std::{
@@ -35,34 +35,43 @@ struct UserData {
     status: AtomicU8
 }
 
-pub struct CuEventFuture<'context> {
-    event: &'context CuEvent,
-    stream: &'context CuStream,
+pub struct CuEventFuture<'task> {
+    event: &'task CuEvent,
+    stream: &'task CuStream,
     user_data: Arc<UserData>
 }
 
-impl<'context> CuEventFuture<'context> {
-    pub fn new(event: &'context CuEvent, stream: &'context CuStream) -> Self {
-        let mut user_data = Arc::new(UserData {
+impl<'task> CuEventFuture<'task> {
+    pub fn new(event: &'task CuEvent, stream: &'task CuStream) -> CuResult<Self> {
+        let user_data = Arc::new(UserData {
             waker: OnceLock::new(), // Placeholder, will be set in poll
             status: AtomicU8::new(STATUS_NONE)
         });
-        Self { 
-            event: event,
-            stream: stream,
-            user_data: user_data
+        // Simply ensures the event is recorded before the callback is registered
+        // An unregistered event could lead to indefinite pending state
+        // The possibility of duplicating the record is acceptable here
+        // The duplication overhead is negligible compared to the safety guarantee
+        match event.record(stream) {
+            Ok(_) => Ok(
+                Self { 
+                    event: event,
+                    stream: stream,
+                    user_data: user_data
+                }
+            ),
+            Err(e) => Err(e)
         }
     }
 }
 
-impl<'context> Future for CuEventFuture<'context> {
+impl<'task> Future for CuEventFuture<'task> {
     type Output = CuResult<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.event.query() {
             Ok(ready) => {
                 if ready {
-                    Poll::Ready(Ok(()))
+                    return Poll::Ready(Ok(()));
                 } else if self.user_data.status.load(Ordering::SeqCst) == STATUS_NONE {
                     // Register callback to wake the task when event completes
                     self.user_data.waker.set(cx.waker().clone()).ok();
@@ -81,7 +90,7 @@ impl<'context> Future for CuEventFuture<'context> {
                 Poll::Pending
                 
             }
-            Err(CuError) => Poll::Ready(Err(CuError))
+            Err(cu_err) => Poll::Ready(Err(cu_err))
         }
     }
 }
@@ -97,9 +106,9 @@ impl Drop for CuEventFuture<'_> {
     }
 }
 
-extern "C" fn wake_callback(userData: *mut c_void) {
+extern "C" fn wake_callback(user_data_ptr: *mut c_void) {
     unsafe {
-        let user_data = Arc::from_raw(userData as *const UserData);
+        let user_data = Arc::from_raw(user_data_ptr as *const UserData);
         if user_data.status.load(Ordering::SeqCst) == STATUS_REGISTERED {
             if let Some(waker) = user_data.waker.get() {
                 waker.wake_by_ref();
